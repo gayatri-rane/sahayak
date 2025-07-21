@@ -1,33 +1,48 @@
-from google import genai
-from google.genai import types
+import google.generativeai as genai
 import time
 import random
 from typing import Optional, List, Dict, Any
 import datetime
 import base64
+import os
 
 class SahayakAI:
     def __init__(self):
         """Initialize the Gemini client"""
-        # Initialize client with Vertex AI
-        self.client = genai.Client(
-            vertexai=True,
-            project="sahayak-mvp-466309",
-            location="us-central1"
+        # Configure API with your key
+        api_key = os.environ.get('GEMINI_API_KEY', 'AIzaSyD-7ZpRGBvjSsjHivAqS0kt4M0WJAdFWiM')
+        genai.configure(api_key=api_key)
+        
+        # Initialize the model
+        self.model = genai.GenerativeModel(
+            model_name='gemini-1.5-flash',
+            generation_config={
+                'temperature': 0.7,
+                'top_p': 0.95,
+                'top_k': 40,
+                'max_output_tokens': 8000,
+            },
+            safety_settings=[
+                {
+                    "category": "HARM_CATEGORY_HARASSMENT",
+                    "threshold": "BLOCK_NONE"
+                },
+                {
+                    "category": "HARM_CATEGORY_HATE_SPEECH",
+                    "threshold": "BLOCK_NONE"
+                },
+                {
+                    "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                    "threshold": "BLOCK_NONE"
+                },
+                {
+                    "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                    "threshold": "BLOCK_NONE"
+                }
+            ]
         )
-        self.model = "gemini-2.0-flash-exp"
         
-        # Rate limiting based on your quota (10 requests per minute)
-        self.requests_per_minute = 10
-        self.min_delay_between_requests = 60 / self.requests_per_minute  # 6 seconds
-        self.last_request_time = 0
-        
-        # Request tracking
-        self.request_count = 0
-        self.request_log = []
-        self.start_time = datetime.datetime.now()
-        
-        # System instruction for the teaching assistant
+        # System instruction
         self.system_instruction = """You are an AI teaching assistant for rural Indian schools, helping teachers create educational content for multi-grade classrooms. You specialize in:
         - Creating content in local languages (Hindi, Marathi, etc.)
         - Generating grade-appropriate worksheets
@@ -38,32 +53,15 @@ class SahayakAI:
         - Generating assessment criteria and rubrics
         Always use simple language and culturally relevant examples from rural Indian life."""
         
-    def _get_config(self):
-        """Get generation configuration"""
-        return types.GenerateContentConfig(
-            temperature=0.7,
-            top_p=0.95,
-            max_output_tokens=8000,
-            safety_settings=[
-                types.SafetySetting(
-                    category="HARM_CATEGORY_HATE_SPEECH",
-                    threshold="OFF"
-                ),
-                types.SafetySetting(
-                    category="HARM_CATEGORY_DANGEROUS_CONTENT",
-                    threshold="OFF"
-                ),
-                types.SafetySetting(
-                    category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                    threshold="OFF"
-                ),
-                types.SafetySetting(
-                    category="HARM_CATEGORY_HARASSMENT",
-                    threshold="OFF"
-                )
-            ],
-            system_instruction=[types.Part.from_text(text=self.system_instruction)]
-        )
+        # Rate limiting based on your quota (10 requests per minute)
+        self.requests_per_minute = 10
+        self.min_delay_between_requests = 60 / self.requests_per_minute  # 6 seconds
+        self.last_request_time = 0
+        
+        # Request tracking
+        self.request_count = 0
+        self.request_log = []
+        self.start_time = datetime.datetime.now()
     
     def _wait_if_needed(self):
         """Implement rate limiting to stay within quota"""
@@ -90,7 +88,7 @@ class SahayakAI:
             "last_requests": self.request_log[-5:]  # Last 5 requests
         }
     
-    def _generate_with_retry(self, contents, max_retries=3):
+    def _generate_with_retry(self, prompt_text, image_data=None, max_retries=3):
         """Generate content with retry logic for rate limiting"""
         # Track request
         self.request_count += 1
@@ -106,11 +104,19 @@ class SahayakAI:
                 
                 print(f"Making request #{self.request_count} (attempt {attempt + 1}/{max_retries})")
                 
-                response = self.client.models.generate_content(
-                    model=self.model,
-                    contents=contents,
-                    config=self._get_config()
-                )
+                # Add system instruction to prompt
+                full_prompt = f"{self.system_instruction}\n\n{prompt_text}"
+                
+                # Generate content
+                if image_data:
+                    # For image-based generation
+                    import PIL.Image
+                    import io
+                    image = PIL.Image.open(io.BytesIO(image_data))
+                    response = self.model.generate_content([full_prompt, image])
+                else:
+                    # For text-only generation
+                    response = self.model.generate_content(full_prompt)
                 
                 print(f"Request successful!")
                 return response.text
@@ -144,14 +150,7 @@ class SahayakAI:
         - Have a clear educational message
         - End with a moral or learning point"""
         
-        contents = [
-            types.Content(
-                role="user",
-                parts=[types.Part.from_text(text=prompt)]
-            )
-        ]
-        
-        return self._generate_with_retry(contents)
+        return self._generate_with_retry(prompt)
     
     def create_worksheet_from_image(self, image_data: str, grades: List[int]) -> str:
         """Create differentiated worksheets from textbook image"""
@@ -169,21 +168,8 @@ class SahayakAI:
             image_bytes = base64.b64decode(image_data)
         else:
             image_bytes = image_data
-            
-        contents = [
-            types.Content(
-                role="user",
-                parts=[
-                    types.Part.from_bytes(
-                        data=image_bytes,
-                        mime_type="image/jpeg"
-                    ),
-                    types.Part.from_text(text=prompt)
-                ]
-            )
-        ]
         
-        return self._generate_with_retry(contents)
+        return self._generate_with_retry(prompt, image_bytes)
     
     def explain_concept(self, question: str, language: str, grade_level: int) -> str:
         """Explain concepts using rural analogies"""
@@ -196,14 +182,7 @@ class SahayakAI:
         - Make it memorable and easy to understand
         - Use story-telling if it helps"""
         
-        contents = [
-            types.Content(
-                role="user",
-                parts=[types.Part.from_text(text=prompt)]
-            )
-        ]
-        
-        return self._generate_with_retry(contents)
+        return self._generate_with_retry(prompt)
     
     def create_visual_aid(self, concept: str, drawing_medium: str = "blackboard") -> str:
         """Create simple visual aid descriptions"""
@@ -219,14 +198,7 @@ class SahayakAI:
         
         Format as clear, numbered steps."""
         
-        contents = [
-            types.Content(
-                role="user",
-                parts=[types.Part.from_text(text=prompt)]
-            )
-        ]
-        
-        return self._generate_with_retry(contents)
+        return self._generate_with_retry(prompt)
     
     def generate_audio_assessment(self, text: str, language: str, grade_level: int) -> str:
         """Generate reading assessment criteria"""
@@ -243,16 +215,7 @@ class SahayakAI:
         6. Follow-up comprehension questions
         7. Tips for helping struggling readers"""
         
-        contents = [
-            types.Content(
-                role="user",
-                parts=[types.Part.from_text(text=prompt)]
-            )
-        ]
-        
-        return self._generate_with_retry(contents)
-    
-    # ============ NEW METHODS NEEDED FOR COMPLETE FUNCTIONALITY ============
+        return self._generate_with_retry(prompt)
     
     def generate_educational_game(self, game_type: str, topic: str, grade: int, language: str = "English") -> str:
         """Generate educational games like vocabulary bingo, math puzzles"""
@@ -284,14 +247,7 @@ class SahayakAI:
         
         Make it suitable for rural Indian classroom with 20-40 students and minimal resources."""
         
-        contents = [
-            types.Content(
-                role="user",
-                parts=[types.Part.from_text(text=prompt)]
-            )
-        ]
-        
-        return self._generate_with_retry(contents)
+        return self._generate_with_retry(prompt)
     
     def create_lesson_plan(self, weekly_goals: str, subjects: List[str], grades: List[int], 
                           duration: str = "week", language: str = "English") -> str:
@@ -315,14 +271,7 @@ class SahayakAI:
         
         Format in {language} and make it practical for rural Indian schools with limited resources."""
         
-        contents = [
-            types.Content(
-                role="user",
-                parts=[types.Part.from_text(text=prompt)]
-            )
-        ]
-        
-        return self._generate_with_retry(contents)
+        return self._generate_with_retry(prompt)
     
     def generate_parent_message(self, message_type: str, student_name: str, 
                                details: Dict[str, Any], language: str = "Hindi") -> str:
@@ -351,14 +300,7 @@ class SahayakAI:
         
         Format for WhatsApp message."""
         
-        contents = [
-            types.Content(
-                role="user",
-                parts=[types.Part.from_text(text=prompt)]
-            )
-        ]
-        
-        return self._generate_with_retry(contents)
+        return self._generate_with_retry(prompt)
     
     def generate_intervention_strategy(self, student_profile: Dict[str, Any], 
                                      areas_of_concern: List[str]) -> str:
@@ -381,14 +323,7 @@ class SahayakAI:
         
         Keep strategies practical and resource-light."""
         
-        contents = [
-            types.Content(
-                role="user",
-                parts=[types.Part.from_text(text=prompt)]
-            )
-        ]
-        
-        return self._generate_with_retry(contents)
+        return self._generate_with_retry(prompt)
     
     def create_offline_content_pack(self, grade: int, subjects: List[str], 
                                    pack_type: str = "weekly") -> str:
@@ -413,14 +348,7 @@ class SahayakAI:
         
         Organize by day/subject for easy use."""
         
-        contents = [
-            types.Content(
-                role="user",
-                parts=[types.Part.from_text(text=prompt)]
-            )
-        ]
-        
-        return self._generate_with_retry(contents)
+        return self._generate_with_retry(prompt)
     
     def generate_multilingual_content(self, content: str, target_languages: List[str], 
                                     maintain_context: bool = True) -> Dict[str, str]:
@@ -438,14 +366,7 @@ class SahayakAI:
         
         Provide translations in a clear format with language labels."""
         
-        contents = [
-            types.Content(
-                role="user",
-                parts=[types.Part.from_text(text=prompt)]
-            )
-        ]
-        
-        response = self._generate_with_retry(contents)
+        response = self._generate_with_retry(prompt)
         
         # Parse response into dictionary (simplified - in production, use proper parsing)
         translations = {"original": content}
@@ -483,18 +404,206 @@ class SahayakAI:
             image_bytes = base64.b64decode(image_data)
         else:
             image_bytes = image_data
-            
-        contents = [
-            types.Content(
-                role="user",
-                parts=[
-                    types.Part.from_bytes(
-                        data=image_bytes,
-                        mime_type="image/jpeg"
-                    ),
-                    types.Part.from_text(text=prompt)
-                ]
-            )
-        ]
         
-        return self._generate_with_retry(contents)
+        return self._generate_with_retry(prompt, image_bytes)
+
+    def generate_assessment_rubric(self, subject: str, topic: str, grade: int, assessment_type: str = "written") -> str:
+        """Generate assessment rubrics for various activities"""
+        prompt = f"""Create a detailed assessment rubric for {assessment_type} assessment in {subject} for grade {grade} students on the topic: {topic}.
+        
+        Include:
+        1. Clear criteria for evaluation (4-5 criteria)
+        2. Performance levels (Excellent, Good, Satisfactory, Needs Improvement)
+        3. Specific descriptors for each level
+        4. Point values or scoring guide
+        5. Space for teacher comments
+        6. Tips for fair assessment in rural contexts
+        7. Accommodation suggestions for struggling students
+        
+        Make it simple for teachers to use and understand."""
+        
+        return self._generate_with_retry(prompt)
+    
+    def create_remedial_content(self, topic: str, grade: int, difficulty_areas: List[str], language: str = "English") -> str:
+        """Create remedial content for students struggling with specific topics"""
+        prompt = f"""Create remedial teaching content for grade {grade} students struggling with {topic} in {language}.
+        
+        Specific difficulty areas: {', '.join(difficulty_areas)}
+        
+        Provide:
+        1. Simplified explanation of the concept
+        2. Step-by-step breakdown
+        3. Visual learning aids description
+        4. Hands-on activities using local materials
+        5. Practice exercises (start very simple)
+        6. Memory tricks or mnemonics
+        7. Peer tutoring suggestions
+        8. Parent guidance (for low-literacy parents)
+        
+        Keep language very simple and use familiar examples."""
+        
+        return self._generate_with_retry(prompt)
+    
+    def generate_festival_activity(self, festival: str, grades: List[int], subjects: List[str]) -> str:
+        """Generate educational activities related to Indian festivals"""
+        prompt = f"""Create educational activities for {festival} celebration suitable for grades {', '.join(map(str, grades))} covering subjects: {', '.join(subjects)}.
+        
+        Include:
+        1. Festival story in simple language
+        2. Math activities related to festival (counting, patterns)
+        3. Language activities (vocabulary, writing)
+        4. Art and craft with local materials
+        5. Science connections (if applicable)
+        6. Values and morals from the festival
+        7. Group activities for multi-grade classroom
+        8. Take-home activities for family involvement
+        
+        Ensure cultural sensitivity and inclusivity."""
+        
+        return self._generate_with_retry(prompt)
+    
+    def create_morning_assembly_content(self, theme: str, duration: str = "week") -> str:
+        """Generate content for morning school assembly"""
+        prompt = f"""Create morning assembly content for a {duration} on the theme: {theme}.
+        
+        For each day include:
+        1. Prayer/thought for the day (secular and inclusive)
+        2. News headlines (child-friendly)
+        3. Word of the day with meaning
+        4. Simple exercise routine (2-3 minutes)
+        5. Student presentation topic
+        6. Motivational message
+        7. Important announcements template
+        8. Birthday wishes format
+        
+        Keep it engaging and suitable for rural schools."""
+        
+        return self._generate_with_retry(prompt)
+    
+    def generate_co_curricular_activity(self, activity_type: str, resources: List[str], group_size: int) -> str:
+        """Generate co-curricular activity plans"""
+        activity_types = {
+            "sports": "physical education and sports",
+            "music": "music and rhythm activities",
+            "drama": "drama and role play",
+            "art": "art and craft",
+            "gardening": "school gardening",
+            "life_skills": "practical life skills"
+        }
+        
+        activity_desc = activity_types.get(activity_type, activity_type)
+        
+        prompt = f"""Create a detailed plan for {activity_desc} activity for a group of {group_size} students.
+        
+        Available resources: {', '.join(resources)}
+        
+        Include:
+        1. Activity objectives
+        2. Step-by-step instructions
+        3. Time allocation (30-45 minutes)
+        4. Safety considerations
+        5. Skill development aspects
+        6. Variations for different age groups
+        7. Assessment of participation
+        8. Connection to academic learning
+        
+        Make it fun and feasible for rural schools."""
+        
+        return self._generate_with_retry(prompt)
+    
+    def create_teacher_training_module(self, topic: str, duration_hours: int) -> str:
+        """Create teacher training content"""
+        prompt = f"""Create a {duration_hours}-hour teacher training module on: {topic}.
+        
+        Structure:
+        1. Learning objectives for teachers
+        2. Session plan with time breakdown
+        3. Interactive activities
+        4. Case studies from rural schools
+        5. Hands-on practice sessions
+        6. Discussion points
+        7. Take-away resources
+        8. Action plan template
+        9. Follow-up activities
+        
+        Focus on practical application in multi-grade rural classrooms."""
+        
+        return self._generate_with_retry(prompt)
+    
+    def generate_school_event_plan(self, event: str, budget: str, expected_attendance: int) -> str:
+        """Generate plans for school events"""
+        prompt = f"""Create a detailed plan for organizing {event} in a rural school.
+        
+        Budget: {budget}
+        Expected attendance: {expected_attendance}
+        
+        Include:
+        1. Event objectives
+        2. Planning timeline (2-4 weeks before)
+        3. Committee structure and responsibilities
+        4. Resource list within budget
+        5. Program schedule
+        6. Student involvement opportunities
+        7. Parent/community participation
+        8. Safety and logistics
+        9. Documentation plan
+        10. Post-event follow-up
+        
+        Keep it simple and community-oriented."""
+        
+        return self._generate_with_retry(prompt)
+    
+    def create_health_hygiene_content(self, topic: str, grade_range: str, local_context: str) -> str:
+        """Create health and hygiene educational content"""
+        prompt = f"""Create health and hygiene education content on {topic} for {grade_range} students in {local_context} context.
+        
+        Include:
+        1. Simple explanation of the health topic
+        2. Why it's important (relatable reasons)
+        3. Step-by-step hygiene practices
+        4. Local challenges and solutions
+        5. Home practices to involve family
+        6. Myths vs facts (address local beliefs)
+        7. Fun activities and games
+        8. Monitoring checklist for teachers
+        9. Visual aid descriptions
+        
+        Use culturally sensitive language and examples."""
+        
+        return self._generate_with_retry(prompt)
+    
+    def generate_peer_learning_activity(self, subject: str, topic: str, mixed_grades: List[int]) -> str:
+        """Generate peer learning activities for multi-grade classrooms"""
+        prompt = f"""Create peer learning activities for {subject} on topic {topic} for mixed grade classroom with grades: {', '.join(map(str, mixed_grades))}.
+        
+        Design activities where:
+        1. Older students can teach younger ones
+        2. Mixed-ability groups work together
+        3. Each grade level has a specific role
+        4. Learning happens through collaboration
+        5. Assessment includes peer feedback
+        6. Materials are shared efficiently
+        7. Time is managed for all groups
+        8. Teacher acts as facilitator
+        
+        Include 3-4 different peer learning formats."""
+        
+        return self._generate_with_retry(prompt)
+    
+    def create_local_curriculum_content(self, standard_topic: str, local_context: str, grade: int) -> str:
+        """Adapt standard curriculum to local context"""
+        prompt = f"""Adapt the standard curriculum topic "{standard_topic}" for grade {grade} to fit the local context of {local_context}.
+        
+        Include:
+        1. Local examples replacing textbook examples
+        2. Community-based learning activities
+        3. Local language terms and translations
+        4. Cultural connections
+        5. Local problem-solving scenarios
+        6. Field trip suggestions (nearby locations)
+        7. Guest speaker ideas (local professionals)
+        8. Home-school connection activities
+        
+        Maintain curriculum standards while making it relevant."""
+        
+        return self._generate_with_retry(prompt)
