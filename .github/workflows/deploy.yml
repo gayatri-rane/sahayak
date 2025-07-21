@@ -40,7 +40,8 @@ jobs:
           --cpu 2 \
           --timeout 300 \
           --max-instances 10 \
-          --set-env-vars PROJECT_ID=$PROJECT_ID,LOCATION=$REGION
+          --set-env-vars PROJECT_ID=$PROJECT_ID,LOCATION=$REGION \
+          --quiet
     
     - name: Display Service URL
       run: |
