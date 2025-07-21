@@ -10,7 +10,7 @@ class SahayakAI:
     def __init__(self):
         """Initialize the Gemini client"""
         # Configure API with your key
-        api_key = os.environ.get('GEMINI_API_KEY', 'AIzaSyD-7ZpRGBvjSsjHivAqS0kt4M0WJAdFWiM')
+        api_key = os.environ.get('GEMINI_API_KEY', 'AIzaSyCq4h2kDkAHRC0DrUCtpGf7X83s2fLBf8Y')
         genai.configure(api_key=api_key)
         
         # Initialize the model
