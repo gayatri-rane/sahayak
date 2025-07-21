@@ -1,0 +1,48 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy.yml'
+
+env:
+  PROJECT_ID: sahayak-mvp-466309
+  SERVICE_NAME: sahayak-backend
+  REGION: us-central1
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Setup Google Cloud Auth
+      uses: google-github-actions/auth@v1
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+    
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v1
+    
+    - name: Build and Deploy to Cloud Run
+      working-directory: ./backend
+      run: |
+        gcloud run deploy $SERVICE_NAME \
+          --source . \
+          --region $REGION \
+          --platform managed \
+          --allow-unauthenticated \
+          --memory 2Gi \
+          --cpu 2 \
+          --timeout 300 \
+          --max-instances 10 \
+          --set-env-vars PROJECT_ID=$PROJECT_ID,LOCATION=$REGION
+    
+    - name: Display Service URL
+      run: |
+        echo "🚀 Backend deployed successfully!"
+        gcloud run services describe $SERVICE_NAME --region $REGION --format 'value(status.url)'

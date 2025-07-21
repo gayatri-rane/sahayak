@@ -1,0 +1,22 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Environment
+.env*
+!.env.example
+github-key.json
+*.json 
+!package.json 
+!package-lock.json 
+github-key.json 
+*-key.json 
+.env 
+.env.* 
