@@ -1,11 +1,11 @@
 class AppConfig {
-  static const String baseUrl = String.fromEnvironment(
-    'API_URL',
-    defaultValue: 'http://localhost:5000'
-  );
+  // static const String baseUrl = String.fromEnvironment(
+  //   'API_URL',
+  //   defaultValue: 'http://localhost:5000'
+  // );
   
   // For production
-  // static const String baseUrl = 'https://sahayak-backend-eseqqxofka-uc.a.run.app';
+  static const String baseUrl = 'https://sahayak-backend-eseqqxofka-uc.a.run.app';
   
   static const Duration apiTimeout = Duration(seconds: 30);
   
