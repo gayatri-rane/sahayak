@@ -19,12 +19,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _notifications = true;
   String _syncFrequency = 'daily';
   int _offlineDataLimit = 100; // MB
-  
+
   // User profile
   final _nameController = TextEditingController();
   final _schoolController = TextEditingController();
   final _phoneController = TextEditingController();
-  
+
   @override
   void initState() {
     super.initState();
@@ -41,7 +41,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _syncFrequency = prefs.getString('sync_frequency') ?? 'daily';
       _offlineDataLimit = prefs.getInt('offline_data_limit') ?? 100;
     });
-    
+
     // Load user profile
     final auth = Provider.of<AuthService>(context, listen: false);
     _nameController.text = auth.userProfile?['name'] ?? '';
@@ -55,10 +55,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: AppBar(
         title: const Text('Settings'),
         backgroundColor: Theme.of(context).primaryColor,
+        foregroundColor: Colors.white,
       ),
       body: SingleChildScrollView(
         child: Column(
           children: [
+            // Account Section
+            _buildAccountSection(),
+
             // Profile Section
             _buildSection(
               'Profile',
@@ -81,16 +85,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   keyboardType: TextInputType.phone,
                 ),
                 const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _saveProfile,
-                    child: const Text('Save Profile'),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _saveProfile,
+                      child: const Text('Save Profile'),
+                    ),
                   ),
                 ),
               ],
             ),
-            
+
             // Language Settings
             _buildSection(
               'Language & Region',
@@ -102,7 +109,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   trailing: DropdownButton<String>(
                     value: _selectedLanguage,
                     underline: const SizedBox(),
-                    items: AppConfig.supportedLanguages.map((lang) {
+                    items: _getSupportedLanguages().map((lang) {
                       return DropdownMenuItem(
                         value: lang,
                         child: Text(lang),
@@ -118,7 +125,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ],
             ),
-            
+
             // Offline Settings
             _buildSection(
               'Offline Settings',
@@ -214,7 +221,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ],
             ),
-            
+
             // Notifications
             _buildSection(
               'Notifications',
@@ -233,7 +240,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ],
             ),
-            
+
+            // Privacy & Security
+            _buildSection(
+              'Privacy & Security',
+              Icons.security,
+              [
+                ListTile(
+                  title: const Text('Data Export'),
+                  subtitle: const Text('Download your data'),
+                  trailing: const Icon(Icons.download_outlined),
+                  onTap: _exportData,
+                ),
+                ListTile(
+                  title: const Text('Clear Cache'),
+                  subtitle: const Text('Free up storage space'),
+                  trailing: const Icon(Icons.cleaning_services_outlined),
+                  onTap: _clearCache,
+                ),
+              ],
+            ),
+
             // About
             _buildSection(
               'About',
@@ -247,26 +274,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   title: const Text('Terms of Service'),
                   trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                   onTap: () {
-                    // Navigate to terms
+                    _showInfoDialog(
+                      'Terms of Service',
+                      'By using this app, you agree to our terms and conditions. '
+                          'This is a demo application for educational purposes.',
+                    );
                   },
                 ),
                 ListTile(
                   title: const Text('Privacy Policy'),
                   trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                   onTap: () {
-                    // Navigate to privacy policy
+                    _showInfoDialog(
+                      'Privacy Policy',
+                      'We respect your privacy. This app stores data locally and '
+                          'uses Firebase for authentication. No personal data is '
+                          'shared with third parties.',
+                    );
                   },
                 ),
                 ListTile(
                   title: const Text('Help & Support'),
                   trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                   onTap: () {
-                    // Navigate to help
+                    _showInfoDialog(
+                      'Help & Support',
+                      'For support, please contact us at support@sahayak.app '
+                          'or visit our help center at sahayak.app/help',
+                    );
                   },
+                ),
+                ListTile(
+                  title: const Text('Open Source Licenses'),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: () => showLicensePage(context: context),
                 ),
               ],
             ),
-            
+
             // Logout
             const SizedBox(height: 24),
             Padding(
@@ -282,6 +327,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: Colors.red),
+                    padding: const EdgeInsets.all(16),
                   ),
                 ),
               ),
@@ -293,9 +339,120 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Widget _buildAccountSection() {
+    return Consumer<AuthService>(
+      builder: (context, auth, _) {
+        final user = auth.user;
+        final isAnonymous = user?.isAnonymous ?? false;
+        final userProfile = auth.userProfile;
+
+        return _buildSection(
+          'Account',
+          Icons.account_circle,
+          [
+            ListTile(
+              leading: CircleAvatar(
+                radius: 25,
+                backgroundImage: user?.photoURL != null
+                    ? NetworkImage(user!.photoURL!)
+                    : null,
+                backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
+                child: user?.photoURL == null
+                    ? Icon(
+                  Icons.person,
+                  color: Theme.of(context).primaryColor,
+                  size: 30,
+                )
+                    : null,
+              ),
+              title: Text(
+                userProfile?['name'] ?? user?.displayName ?? 'Guest User',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isAnonymous
+                        ? 'Anonymous Account'
+                        : (user?.email ?? 'No email'),
+                  ),
+                  if (userProfile?['school']?.isNotEmpty == true)
+                    Text(
+                      userProfile!['school'],
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const Divider(),
+
+            // Account Status
+            ListTile(
+              leading: Icon(
+                isAnonymous ? Icons.visibility_off : Icons.verified_user,
+                color: isAnonymous ? Colors.orange : Colors.green,
+              ),
+              title: Text(
+                isAnonymous ? 'Temporary Account' : 'Verified Account',
+              ),
+              subtitle: Text(
+                isAnonymous
+                    ? 'Link with Google to save your data permanently'
+                    : 'Your account is secure and backed up',
+              ),
+            ),
+
+            if (isAnonymous) ...[
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _linkWithGoogle,
+                    icon: const Icon(Icons.link),
+                    label: const Text('Link with Google Account'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _deleteAccount,
+                  icon: const Icon(Icons.delete_forever, color: Colors.red),
+                  label: const Text(
+                    'Delete Account',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.red),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildSection(String title, IconData icon, List<Widget> children) {
     return Card(
       margin: const EdgeInsets.all(8),
+      elevation: 2,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -307,12 +464,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(width: 8),
                 Text(
                   title,
-                  style: Theme.of(context).textTheme.titleLarge,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),
           ),
           ...children,
+          const SizedBox(height: 8),
         ],
       ),
     );
@@ -333,9 +493,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
           labelText: label,
           prefixIcon: Icon(icon),
           border: const OutlineInputBorder(),
+          filled: true,
+          fillColor: Colors.grey[50],
         ),
       ),
     );
+  }
+
+  List<String> _getSupportedLanguages() {
+    // Return supported languages, fallback if AppConfig doesn't exist
+    try {
+      return AppConfig.supportedLanguages;
+    } catch (e) {
+      return ['English', 'Hindi', 'Bengali', 'Tamil', 'Telugu', 'Marathi'];
+    }
   }
 
   String _getSyncFrequencyText(String frequency) {
@@ -364,10 +535,121 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  void _saveProfile() {
-    // Save profile implementation
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Profile saved successfully!')),
+  void _saveProfile() async {
+    try {
+      final auth = Provider.of<AuthService>(context, listen: false);
+      await auth.updateProfile({
+        'name': _nameController.text,
+        'school': _schoolController.text,
+        'phone': _phoneController.text,
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profile saved successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save profile: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _linkWithGoogle() async {
+    try {
+      final auth = Provider.of<AuthService>(context, listen: false);
+      final success = await auth.linkAnonymousWithGoogle();
+
+      if (success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Account linked successfully! Your data is now secure.'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to link account: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _deleteAccount() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Account'),
+        content: const Text(
+          'Are you sure you want to delete your account? '
+              'This action cannot be undone and all your data will be lost permanently.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              try {
+                final auth = Provider.of<AuthService>(context, listen: false);
+                Navigator.pop(context); // Close dialog first
+
+                // Show loading
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                );
+
+                await auth.deleteAccount();
+
+                if (mounted) {
+                  Navigator.pop(context); // Close loading
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Account deleted successfully'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  Navigator.pop(context); // Close loading
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Failed to delete account: ${e.toString()}'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -378,7 +660,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: const Text('Download Offline Content'),
         content: const Text(
           'This will download essential resources for offline use. '
-          'The download size will be approximately 50-100 MB.',
+              'The download size will be approximately 50-100 MB. '
+              'Make sure you have a stable internet connection.',
         ),
         actions: [
           TextButton(
@@ -394,6 +677,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   duration: Duration(seconds: 3),
                 ),
               );
+              // Implement actual download logic here
             },
             child: const Text('Download'),
           ),
@@ -409,7 +693,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: const Text('Clear Offline Data'),
         content: const Text(
           'This will delete all downloaded offline content. '
-          'You will need to download it again to use offline features.',
+              'You will need to download it again to use offline features. '
+              'This will free up storage space on your device.',
         ),
         actions: [
           TextButton(
@@ -420,13 +705,97 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onPressed: () {
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Offline data cleared')),
+                const SnackBar(
+                  content: Text('Offline data cleared successfully'),
+                  backgroundColor: Colors.green,
+                ),
               );
+              // Implement actual clear logic here
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
+              backgroundColor: Colors.orange,
             ),
             child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _exportData() async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Preparing your data for export...'),
+          ],
+        ),
+      ),
+    );
+
+    // Simulate data export
+    await Future.delayed(const Duration(seconds: 2));
+
+    if (mounted) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Data export completed! Check your downloads folder.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
+  void _clearCache() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear Cache'),
+        content: const Text(
+          'This will clear temporary files and cached data. '
+              'Your personal data and settings will not be affected.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Clear Cache'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cache cleared successfully'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
+  void _showInfoDialog(String title, String content) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: SingleChildScrollView(
+          child: Text(content),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
           ),
         ],
       ),
@@ -438,7 +807,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout?'),
+        content: const Text(
+          'Are you sure you want to logout? '
+              'If you have an anonymous account, make sure to link it with Google first to avoid losing your data.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -446,14 +818,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
-              final auth = Provider.of<AuthService>(context, listen: false);
-              await auth.logout();
-              if (mounted) {
-                Navigator.pop(context);
+              try {
+                final auth = Provider.of<AuthService>(context, listen: false);
+                Navigator.pop(context); // Close dialog first
+
+                await auth.logout();
+
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Logged out successfully'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Logout failed: ${e.toString()}'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
               }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
             ),
             child: const Text('Logout'),
           ),

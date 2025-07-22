@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../services/api_service.dart';
 import '../config/app_config.dart';
 import '../widgets/loading_widget.dart';
-import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 

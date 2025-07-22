@@ -5,7 +5,6 @@ import 'dart:io';
 import 'dart:convert';
 import '../services/api_service.dart';
 import '../widgets/loading_widget.dart';
-import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 

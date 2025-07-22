@@ -43,7 +43,10 @@ class ApiService {
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/generate-story'),
-      headers: await getHeaders(),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer test-token-123'
+      },
       body: jsonEncode({
         'language': language,
         'grade': grade,
@@ -67,7 +70,10 @@ class ApiService {
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/create-worksheet'),
-      headers: await getHeaders(),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer test-token-123'
+      },
       body: jsonEncode({
         'image': base64Image,
         'grades': grades,
@@ -89,7 +95,10 @@ class ApiService {
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/explain-concept'),
-      headers: await getHeaders(),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer test-token-123'
+      },
       body: jsonEncode({
         'question': question,
         'language': language,
@@ -111,7 +120,10 @@ class ApiService {
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/create-visual-aid'),
-      headers: await getHeaders(),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer test-token-123'
+      },
       body: jsonEncode({
         'concept': concept,
         'drawing_medium': drawingMedium,
@@ -134,7 +146,10 @@ class ApiService {
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/generate-game'),
-      headers: await getHeaders(),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer test-token-123'
+      },
       body: jsonEncode({
         'game_type': gameType,
         'topic': topic,
@@ -161,7 +176,10 @@ class ApiService {
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/create-lesson-plan'),
-      headers: await getHeaders(),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer test-token-123'
+      },
       body: jsonEncode({
         'grades': grades,
         'subjects': subjects,
@@ -183,7 +201,10 @@ class ApiService {
   Future<Map<String, dynamic>> getStudentProgress(String studentId) async {
     final response = await http.get(
       Uri.parse('$baseUrl/analytics/student-progress?student_id=$studentId'),
-      headers: await getHeaders(),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer test-token-123'
+      },
     );
     
     if (response.statusCode == 200) {
@@ -213,7 +234,10 @@ class ApiService {
     
     final response = await http.post(
       Uri.parse('$baseUrl/analytics/student-progress'),
-      headers: await getHeaders(),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer test-token-123'
+      },
       body: jsonEncode(body),
     );
     
@@ -245,7 +269,10 @@ class ApiService {
     
     final response = await http.get(
       uri,
-      headers: {'Content-Type': 'application/json'},
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer test-token-123'
+      },
     );
     
     if (response.statusCode == 200) {

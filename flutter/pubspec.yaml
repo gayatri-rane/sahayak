@@ -31,7 +31,7 @@ dependencies:
   
   # File
   path_provider: ^2.1.1
-  file_picker: ^6.1.1
+  file_picker: ^8.1.6
   
   # PDF
   pdf: ^3.10.7
@@ -42,9 +42,11 @@ dependencies:
   connectivity_plus: ^5.0.2
   permission_handler: ^11.1.0
   
-  # Firebase (optional)
+  # Firebase - Compatible versions
   firebase_core: ^2.24.2
-  firebase_auth: ^4.16.0
+  firebase_auth: ^4.15.3
+  google_sign_in: ^6.2.0
+  sign_in_with_apple: ^6.1.2
 
 dev_dependencies:
   flutter_test:
@@ -53,7 +55,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  
+
   assets:
     - assets/images/
     - assets/fonts/
