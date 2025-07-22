@@ -1,11 +1,11 @@
-name: Deploy to Cloud Run
+name: Deploy Backend to Cloud Run
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
     paths:
       - 'backend/**'
-      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
 
 env:
   PROJECT_ID: sahayak-mvp-466309
@@ -18,32 +18,94 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
-    
-    - name: Setup Google Cloud Auth
-      uses: google-github-actions/auth@v1
+      uses: actions/checkout@v4
+
+    - name: Setup Google Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
       with:
-        credentials_json: ${{ secrets.GCP_SA_KEY }}
-    
-    - name: Set up Cloud SDK
-      uses: google-github-actions/setup-gcloud@v1
-    
-    - name: Build and Deploy to Cloud Run
-      working-directory: ./backend
+        service_account_key: ${{ secrets.GCP_SA_KEY }}
+        project_id: ${{ env.PROJECT_ID }}
+
+    - name: Configure Docker for GCR
       run: |
-        gcloud run deploy $SERVICE_NAME \
+        gcloud auth configure-docker
+
+    - name: Check backend files
+      run: |
+        echo "Checking backend directory contents..."
+        ls -la backend/
+        echo "Checking for Dockerfile..."
+        if [ -f backend/Dockerfile ]; then
+          echo "Dockerfile found"
+          cat backend/Dockerfile
+        else
+          echo "ERROR: Dockerfile not found!"
+        fi
+        echo "Checking for requirements..."
+        ls -la backend/requirements*.txt || echo "No requirements files found"
+
+    - name: Build Docker image locally first (for debugging)
+      run: |
+        cd backend
+        echo "Building Docker image..."
+        docker build -t test-image . || {
+          echo "Docker build failed. Showing last 50 lines of output:"
+          docker build -t test-image . 2>&1 | tail -50
+          exit 1
+        }
+
+    - name: Deploy to Cloud Run
+      run: |
+        cd backend
+        
+        # Try deployment with detailed logging
+        gcloud run deploy ${{ env.SERVICE_NAME }} \
           --source . \
-          --region $REGION \
           --platform managed \
+          --region ${{ env.REGION }} \
           --allow-unauthenticated \
-          --memory 2Gi \
-          --cpu 2 \
+          --memory 1Gi \
+          --cpu 1 \
           --timeout 300 \
           --max-instances 10 \
-          --set-env-vars PROJECT_ID=$PROJECT_ID,LOCATION=$REGION,GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }} \
-          --quiet
-    
-    - name: Display Service URL
+          --set-env-vars "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" \
+          --project ${{ env.PROJECT_ID }} \
+          --verbosity=debug 2>&1 | tee deploy.log
+        
+        # Check if deployment failed
+        if [ ${PIPESTATUS[0]} -ne 0 ]; then
+          echo "Deployment failed. Checking logs..."
+          
+          # Get the latest build ID
+          BUILD_ID=$(gcloud builds list --limit=1 --format="value(id)")
+          echo "Latest build ID: $BUILD_ID"
+          
+          # Get build logs
+          echo "Build logs:"
+          gcloud builds log $BUILD_ID || echo "Could not retrieve build logs"
+          
+          exit 1
+        fi
+
+    - name: Test deployment
+      if: success()
       run: |
-        echo "🚀 Backend deployed successfully!"
-        gcloud run services describe $SERVICE_NAME --region $REGION --format 'value(status.url)'
+        SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
+          --region ${{ env.REGION }} \
+          --format 'value(status.url)' \
+          --project ${{ env.PROJECT_ID }})
+        
+        echo "Service URL: $SERVICE_URL"
+        
+        # Test health endpoint
+        curl -f "$SERVICE_URL/health" || echo "Health check failed"
+
+    - name: Upload deployment logs
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: deployment-logs
+        path: |
+          backend/deploy.log
+          backend/Dockerfile
+          backend/requirements*.txt
