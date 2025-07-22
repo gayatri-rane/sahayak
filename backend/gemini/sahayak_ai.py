@@ -6,6 +6,7 @@ import datetime
 import base64
 import os
 
+
 class SahayakAI:
     def __init__(self):
         """Initialize the Gemini client"""
