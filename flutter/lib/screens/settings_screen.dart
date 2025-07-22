@@ -11,7 +11,13 @@ class SettingsScreen extends StatefulWidget {
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
+class _SettingsScreenState extends State<SettingsScreen>
+    with TickerProviderStateMixin {
+  // Animation controllers
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+
   // Preferences
   String _selectedLanguage = 'English';
   bool _offlineMode = false;
@@ -28,7 +34,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
+    _initializeAnimations();
     _loadSettings();
+  }
+
+  void _initializeAnimations() {
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOut,
+    ));
+
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.3),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOut,
+    ));
+
+    _animationController.forward();
   }
 
   Future<void> _loadSettings() async {
@@ -49,297 +81,168 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _phoneController.text = auth.userProfile?['phone'] ?? '';
   }
 
+  double _getResponsivePadding(double screenWidth) {
+    if (screenWidth < 600) return 16.0;
+    if (screenWidth < 900) return 24.0;
+    return 32.0;
+  }
+
+  double _getCardPadding(double screenWidth) {
+    if (screenWidth < 600) return 16.0;
+    if (screenWidth < 900) return 20.0;
+    return 24.0;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final screenWidth = screenSize.width;
+    final padding = _getResponsivePadding(screenWidth);
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings'),
-        backgroundColor: Theme.of(context).primaryColor,
-        foregroundColor: Colors.white,
-      ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            // Account Section
-            _buildAccountSection(),
-
-            // Profile Section
-            _buildSection(
-              'Profile',
-              Icons.person,
-              [
-                _buildTextField(
-                  controller: _nameController,
-                  label: 'Name',
-                  icon: Icons.person_outline,
-                ),
-                _buildTextField(
-                  controller: _schoolController,
-                  label: 'School Name',
-                  icon: Icons.school_outlined,
-                ),
-                _buildTextField(
-                  controller: _phoneController,
-                  label: 'Phone Number',
-                  icon: Icons.phone_outlined,
-                  keyboardType: TextInputType.phone,
-                ),
-                const SizedBox(height: 16),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _saveProfile,
-                      child: const Text('Save Profile'),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
-            // Language Settings
-            _buildSection(
-              'Language & Region',
-              Icons.language,
-              [
-                ListTile(
-                  title: const Text('App Language'),
-                  subtitle: Text(_selectedLanguage),
-                  trailing: DropdownButton<String>(
-                    value: _selectedLanguage,
-                    underline: const SizedBox(),
-                    items: _getSupportedLanguages().map((lang) {
-                      return DropdownMenuItem(
-                        value: lang,
-                        child: Text(lang),
-                      );
-                    }).toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedLanguage = value!;
-                      });
-                      _saveSetting('language', value!);
-                    },
-                  ),
-                ),
-              ],
-            ),
-
-            // Offline Settings
-            _buildSection(
-              'Offline Settings',
-              Icons.cloud_off,
-              [
-                SwitchListTile(
-                  title: const Text('Offline Mode'),
-                  subtitle: const Text('Work without internet connection'),
-                  value: _offlineMode,
-                  onChanged: (value) {
-                    setState(() {
-                      _offlineMode = value;
-                    });
-                    _saveSetting('offline_mode', value);
-                  },
-                ),
-                SwitchListTile(
-                  title: const Text('Auto Sync'),
-                  subtitle: const Text('Sync data when connection is available'),
-                  value: _autoSync,
-                  onChanged: _offlineMode ? null : (value) {
-                    setState(() {
-                      _autoSync = value;
-                    });
-                    _saveSetting('auto_sync', value);
-                  },
-                ),
-                ListTile(
-                  title: const Text('Sync Frequency'),
-                  subtitle: Text(_getSyncFrequencyText(_syncFrequency)),
-                  enabled: _autoSync && !_offlineMode,
-                  trailing: DropdownButton<String>(
-                    value: _syncFrequency,
-                    underline: const SizedBox(),
-                    items: const [
-                      DropdownMenuItem(value: 'realtime', child: Text('Real-time')),
-                      DropdownMenuItem(value: 'hourly', child: Text('Hourly')),
-                      DropdownMenuItem(value: 'daily', child: Text('Daily')),
-                      DropdownMenuItem(value: 'weekly', child: Text('Weekly')),
-                    ],
-                    onChanged: _autoSync && !_offlineMode ? (value) {
-                      setState(() {
-                        _syncFrequency = value!;
-                      });
-                      _saveSetting('sync_frequency', value!);
-                    } : null,
-                  ),
-                ),
-                ListTile(
-                  title: const Text('Offline Data Limit'),
-                  subtitle: Text('$_offlineDataLimit MB'),
-                  trailing: SizedBox(
-                    width: 200,
-                    child: Slider(
-                      value: _offlineDataLimit.toDouble(),
-                      min: 50,
-                      max: 500,
-                      divisions: 9,
-                      label: '$_offlineDataLimit MB',
-                      onChanged: (value) {
-                        setState(() {
-                          _offlineDataLimit = value.round();
-                        });
-                      },
-                      onChangeEnd: (value) {
-                        _saveSetting('offline_data_limit', value.round());
-                      },
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _downloadOfflineContent,
-                          icon: const Icon(Icons.download),
-                          label: const Text('Download Content'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _clearOfflineData,
-                          icon: const Icon(Icons.delete_outline),
-                          label: const Text('Clear Data'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-
-            // Notifications
-            _buildSection(
-              'Notifications',
-              Icons.notifications,
-              [
-                SwitchListTile(
-                  title: const Text('Enable Notifications'),
-                  subtitle: const Text('Receive updates and reminders'),
-                  value: _notifications,
-                  onChanged: (value) {
-                    setState(() {
-                      _notifications = value;
-                    });
-                    _saveSetting('notifications', value);
-                  },
-                ),
-              ],
-            ),
-
-            // Privacy & Security
-            _buildSection(
-              'Privacy & Security',
-              Icons.security,
-              [
-                ListTile(
-                  title: const Text('Data Export'),
-                  subtitle: const Text('Download your data'),
-                  trailing: const Icon(Icons.download_outlined),
-                  onTap: _exportData,
-                ),
-                ListTile(
-                  title: const Text('Clear Cache'),
-                  subtitle: const Text('Free up storage space'),
-                  trailing: const Icon(Icons.cleaning_services_outlined),
-                  onTap: _clearCache,
-                ),
-              ],
-            ),
-
-            // About
-            _buildSection(
-              'About',
-              Icons.info,
-              [
-                ListTile(
-                  title: const Text('Version'),
-                  subtitle: const Text('1.0.0'),
-                ),
-                ListTile(
-                  title: const Text('Terms of Service'),
-                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                  onTap: () {
-                    _showInfoDialog(
-                      'Terms of Service',
-                      'By using this app, you agree to our terms and conditions. '
-                          'This is a demo application for educational purposes.',
-                    );
-                  },
-                ),
-                ListTile(
-                  title: const Text('Privacy Policy'),
-                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                  onTap: () {
-                    _showInfoDialog(
-                      'Privacy Policy',
-                      'We respect your privacy. This app stores data locally and '
-                          'uses Firebase for authentication. No personal data is '
-                          'shared with third parties.',
-                    );
-                  },
-                ),
-                ListTile(
-                  title: const Text('Help & Support'),
-                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                  onTap: () {
-                    _showInfoDialog(
-                      'Help & Support',
-                      'For support, please contact us at support@sahayak.app '
-                          'or visit our help center at sahayak.app/help',
-                    );
-                  },
-                ),
-                ListTile(
-                  title: const Text('Open Source Licenses'),
-                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                  onTap: () => showLicensePage(context: context),
-                ),
-              ],
-            ),
-
-            // Logout
-            const SizedBox(height: 24),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _logout,
-                  icon: const Icon(Icons.logout, color: Colors.red),
-                  label: const Text(
-                    'Logout',
-                    style: TextStyle(color: Colors.red),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Colors.red),
-                    padding: const EdgeInsets.all(16),
-                  ),
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: _buildAppBar(context, screenWidth),
+      body: AnimatedBuilder(
+        animation: _animationController,
+        builder: (context, child) {
+          return FadeTransition(
+            opacity: _fadeAnimation,
+            child: SlideTransition(
+              position: _slideAnimation,
+              child: SingleChildScrollView(
+                padding: EdgeInsets.all(padding),
+                child: Column(
+                  children: [
+                    _buildHeaderCard(screenWidth),
+                    const SizedBox(height: 16),
+                    _buildAccountSection(screenWidth),
+                    const SizedBox(height: 16),
+                    _buildProfileSection(screenWidth),
+                    const SizedBox(height: 16),
+                    _buildLanguageSection(screenWidth),
+                    const SizedBox(height: 16),
+                    _buildOfflineSection(screenWidth),
+                    const SizedBox(height: 16),
+                    _buildNotificationsSection(screenWidth),
+                    const SizedBox(height: 16),
+                    _buildPrivacySection(screenWidth),
+                    const SizedBox(height: 16),
+                    _buildAboutSection(screenWidth),
+                    const SizedBox(height: 16),
+                    _buildLogoutButton(screenWidth),
+                    const SizedBox(height: 32),
+                  ],
                 ),
               ),
             ),
-            const SizedBox(height: 32),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
 
-  Widget _buildAccountSection() {
+  PreferredSizeWidget _buildAppBar(BuildContext context, double screenWidth) {
+    return AppBar(
+      elevation: 0,
+      backgroundColor: Colors.white,
+      foregroundColor: const Color(0xFF1E293B),
+      title: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
+              ),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.settings,
+              color: Colors.white,
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: 12),
+          const Text(
+            'Settings',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 20,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeaderCard(double screenWidth) {
+    final cardPadding = _getCardPadding(screenWidth);
+
+    return Container(
+      padding: EdgeInsets.all(cardPadding),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF3B82F6),
+            Color(0xFF1D4ED8),
+            Color(0xFF1E40AF),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF3B82F6).withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              Icons.settings,
+              color: Colors.white,
+              size: screenWidth < 600 ? 20 : 24,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'App Settings',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: screenWidth < 600 ? 18 : 22,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  'Customize your experience',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.9),
+                    fontSize: screenWidth < 600 ? 14 : 16,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAccountSection(double screenWidth) {
     return Consumer<AuthService>(
       builder: (context, auth, _) {
         final user = auth.user;
@@ -349,25 +252,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return _buildSection(
           'Account',
           Icons.account_circle,
+          const LinearGradient(colors: [Color(0xFF06B6D4), Color(0xFF0891B2)]),
+          screenWidth,
           [
             ListTile(
+              contentPadding: EdgeInsets.zero,
               leading: CircleAvatar(
-                radius: 25,
+                radius: screenWidth < 600 ? 25 : 30,
                 backgroundImage: user?.photoURL != null
                     ? NetworkImage(user!.photoURL!)
                     : null,
-                backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
+                backgroundColor: const Color(0xFF3B82F6).withOpacity(0.1),
                 child: user?.photoURL == null
                     ? Icon(
                   Icons.person,
-                  color: Theme.of(context).primaryColor,
-                  size: 30,
+                  color: const Color(0xFF3B82F6),
+                  size: screenWidth < 600 ? 25 : 30,
                 )
                     : null,
               ),
               title: Text(
                 userProfile?['name'] ?? user?.displayName ?? 'Guest User',
-                style: const TextStyle(fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: screenWidth < 600 ? 16 : 18,
+                ),
               ),
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -376,72 +285,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     isAnonymous
                         ? 'Anonymous Account'
                         : (user?.email ?? 'No email'),
+                    style: TextStyle(
+                      fontSize: screenWidth < 600 ? 14 : 16,
+                    ),
                   ),
                   if (userProfile?['school']?.isNotEmpty == true)
                     Text(
                       userProfile!['school'],
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: screenWidth < 600 ? 12 : 14,
                         color: Colors.grey[600],
                       ),
                     ),
                 ],
               ),
             ),
-            const Divider(),
-
-            // Account Status
-            ListTile(
-              leading: Icon(
-                isAnonymous ? Icons.visibility_off : Icons.verified_user,
-                color: isAnonymous ? Colors.orange : Colors.green,
-              ),
-              title: Text(
-                isAnonymous ? 'Temporary Account' : 'Verified Account',
-              ),
-              subtitle: Text(
-                isAnonymous
-                    ? 'Link with Google to save your data permanently'
-                    : 'Your account is secure and backed up',
-              ),
-            ),
-
+            const SizedBox(height: 16),
+            _buildStatusChip(isAnonymous, screenWidth),
             if (isAnonymous) ...[
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _linkWithGoogle,
-                    icon: const Icon(Icons.link),
-                    label: const Text('Link with Google Account'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ),
+              const SizedBox(height: 16),
+              _buildGradientButton(
+                'Link with Google Account',
+                Icons.link,
+                const LinearGradient(colors: [Color(0xFF3B82F6), Color(0xFF1D4ED8)]),
+                _linkWithGoogle,
+                screenWidth,
               ),
             ],
-
             const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _deleteAccount,
-                  icon: const Icon(Icons.delete_forever, color: Colors.red),
-                  label: const Text(
-                    'Delete Account',
-                    style: TextStyle(color: Colors.red),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Colors.red),
-                  ),
-                ),
-              ),
+            _buildOutlinedButton(
+              'Delete Account',
+              Icons.delete_forever,
+              Colors.red,
+              _deleteAccount,
+              screenWidth,
             ),
           ],
         );
@@ -449,30 +326,400 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildSection(String title, IconData icon, List<Widget> children) {
-    return Card(
-      margin: const EdgeInsets.all(8),
-      elevation: 2,
+  Widget _buildStatusChip(bool isAnonymous, double screenWidth) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: screenWidth < 600 ? 12 : 16,
+        vertical: screenWidth < 600 ? 8 : 10,
+      ),
+      decoration: BoxDecoration(
+        color: isAnonymous ? Colors.orange.withOpacity(0.1) : Colors.green.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isAnonymous ? Colors.orange : Colors.green,
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isAnonymous ? Icons.visibility_off : Icons.verified_user,
+            color: isAnonymous ? Colors.orange : Colors.green,
+            size: screenWidth < 600 ? 16 : 18,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              isAnonymous
+                  ? 'Temporary Account - Link to save data permanently'
+                  : 'Verified Account - Your data is secure',
+              style: TextStyle(
+                color: isAnonymous ? Colors.orange : Colors.green,
+                fontWeight: FontWeight.w500,
+                fontSize: screenWidth < 600 ? 12 : 14,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfileSection(double screenWidth) {
+    return _buildSection(
+      'Profile Information',
+      Icons.person,
+      const LinearGradient(colors: [Color(0xFF10B981), Color(0xFF059669)]),
+      screenWidth,
+      [
+        _buildTextField(
+          controller: _nameController,
+          label: 'Full Name',
+          icon: Icons.person_outline,
+          screenWidth: screenWidth,
+        ),
+        const SizedBox(height: 16),
+        _buildTextField(
+          controller: _schoolController,
+          label: 'School Name',
+          icon: Icons.school_outlined,
+          screenWidth: screenWidth,
+        ),
+        const SizedBox(height: 16),
+        _buildTextField(
+          controller: _phoneController,
+          label: 'Phone Number',
+          icon: Icons.phone_outlined,
+          keyboardType: TextInputType.phone,
+          screenWidth: screenWidth,
+        ),
+        const SizedBox(height: 20),
+        _buildGradientButton(
+          'Save Profile',
+          Icons.save,
+          const LinearGradient(colors: [Color(0xFF10B981), Color(0xFF059669)]),
+          _saveProfile,
+          screenWidth,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLanguageSection(double screenWidth) {
+    return _buildSection(
+      'Language & Region',
+      Icons.language,
+      const LinearGradient(colors: [Color(0xFFF59E0B), Color(0xFFD97706)]),
+      screenWidth,
+      [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF59E0B).withOpacity(0.05),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: const Color(0xFFF59E0B).withOpacity(0.2),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.translate,
+                color: const Color(0xFFF59E0B),
+                size: screenWidth < 600 ? 20 : 24,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'App Language',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: screenWidth < 600 ? 14 : 16,
+                      ),
+                    ),
+                    Text(
+                      _selectedLanguage,
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: screenWidth < 600 ? 12 : 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF59E0B).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: DropdownButton<String>(
+                  value: _selectedLanguage,
+                  underline: const SizedBox(),
+                  style: TextStyle(
+                    color: const Color(0xFFF59E0B),
+                    fontSize: screenWidth < 600 ? 12 : 14,
+                  ),
+                  items: _getSupportedLanguages().map((lang) {
+                    return DropdownMenuItem(
+                      value: lang,
+                      child: Text(lang),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedLanguage = value!;
+                    });
+                    _saveSetting('language', value!);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildOfflineSection(double screenWidth) {
+    return _buildSection(
+      'Offline & Sync Settings',
+      Icons.cloud_off,
+      const LinearGradient(colors: [Color(0xFF8B5CF6), Color(0xFF7C3AED)]),
+      screenWidth,
+      [
+        _buildSwitchTile(
+          'Offline Mode',
+          'Work without internet connection',
+          _offlineMode,
+              (value) {
+            setState(() {
+              _offlineMode = value;
+            });
+            _saveSetting('offline_mode', value);
+          },
+          screenWidth,
+        ),
+        const SizedBox(height: 8),
+        _buildSwitchTile(
+          'Auto Sync',
+          'Sync data when connection is available',
+          _autoSync,
+          _offlineMode ? null : (value) {
+            setState(() {
+              _autoSync = value;
+            });
+            _saveSetting('auto_sync', value);
+          },
+          screenWidth,
+        ),
+        const SizedBox(height: 16),
+        _buildSyncFrequencySelector(screenWidth),
+        const SizedBox(height: 16),
+        _buildDataLimitSlider(screenWidth),
+        const SizedBox(height: 20),
+        Row(
+          children: [
+            Expanded(
+              child: _buildOutlinedButton(
+                'Download Content',
+                Icons.download,
+                const Color(0xFF8B5CF6),
+                _downloadOfflineContent,
+                screenWidth,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildOutlinedButton(
+                'Clear Data',
+                Icons.delete_outline,
+                Colors.orange,
+                _clearOfflineData,
+                screenWidth,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNotificationsSection(double screenWidth) {
+    return _buildSection(
+      'Notifications',
+      Icons.notifications,
+      const LinearGradient(colors: [Color(0xFFEF4444), Color(0xFFDC2626)]),
+      screenWidth,
+      [
+        _buildSwitchTile(
+          'Enable Notifications',
+          'Receive updates and reminders',
+          _notifications,
+              (value) {
+            setState(() {
+              _notifications = value;
+            });
+            _saveSetting('notifications', value);
+          },
+          screenWidth,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPrivacySection(double screenWidth) {
+    return _buildSection(
+      'Privacy & Security',
+      Icons.security,
+      const LinearGradient(colors: [Color(0xFF14B8A6), Color(0xFF0D9488)]),
+      screenWidth,
+      [
+        _buildActionTile(
+          'Data Export',
+          'Download your data',
+          Icons.download_outlined,
+          _exportData,
+          screenWidth,
+        ),
+        const SizedBox(height: 8),
+        _buildActionTile(
+          'Clear Cache',
+          'Free up storage space',
+          Icons.cleaning_services_outlined,
+          _clearCache,
+          screenWidth,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAboutSection(double screenWidth) {
+    return _buildSection(
+      'About',
+      Icons.info,
+      const LinearGradient(colors: [Color(0xFF64748B), Color(0xFF475569)]),
+      screenWidth,
+      [
+        _buildInfoTile('Version', '1.0.0', screenWidth),
+        const SizedBox(height: 8),
+        _buildActionTile(
+          'Terms of Service',
+          'Read our terms and conditions',
+          Icons.arrow_forward_ios,
+              () => _showInfoDialog(
+            'Terms of Service',
+            'By using this app, you agree to our terms and conditions. '
+                'This is a demo application for educational purposes.',
+          ),
+          screenWidth,
+        ),
+        const SizedBox(height: 8),
+        _buildActionTile(
+          'Privacy Policy',
+          'How we protect your data',
+          Icons.arrow_forward_ios,
+              () => _showInfoDialog(
+            'Privacy Policy',
+            'We respect your privacy. This app stores data locally and '
+                'uses Firebase for authentication. No personal data is '
+                'shared with third parties.',
+          ),
+          screenWidth,
+        ),
+        const SizedBox(height: 8),
+        _buildActionTile(
+          'Help & Support',
+          'Get help and contact support',
+          Icons.arrow_forward_ios,
+              () => _showInfoDialog(
+            'Help & Support',
+            'For support, please contact us at support@sahayak.app '
+                'or visit our help center at sahayak.app/help',
+          ),
+          screenWidth,
+        ),
+        const SizedBox(height: 8),
+        _buildActionTile(
+          'Open Source Licenses',
+          'View third-party licenses',
+          Icons.arrow_forward_ios,
+              () => showLicensePage(context: context),
+          screenWidth,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSection(
+      String title,
+      IconData icon,
+      LinearGradient gradient,
+      double screenWidth,
+      List<Widget> children,
+      ) {
+    final cardPadding = _getCardPadding(screenWidth);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
+          Container(
+            padding: EdgeInsets.all(cardPadding),
+            decoration: BoxDecoration(
+              gradient: gradient,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
+              ),
+            ),
             child: Row(
               children: [
-                Icon(icon, size: 24, color: Theme.of(context).primaryColor),
-                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    icon,
+                    size: screenWidth < 600 ? 18 : 20,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 12),
                 Text(
                   title,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: screenWidth < 600 ? 16 : 18,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
             ),
           ),
-          ...children,
-          const SizedBox(height: 8),
+          Padding(
+            padding: EdgeInsets.all(cardPadding),
+            child: Column(
+              children: children,
+            ),
+          ),
         ],
       ),
     );
@@ -482,26 +729,404 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required TextEditingController controller,
     required String label,
     required IconData icon,
+    required double screenWidth,
     TextInputType? keyboardType,
   }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: TextField(
-        controller: controller,
-        keyboardType: keyboardType,
-        decoration: InputDecoration(
-          labelText: label,
-          prefixIcon: Icon(icon),
-          border: const OutlineInputBorder(),
-          filled: true,
-          fillColor: Colors.grey[50],
+    return TextField(
+      controller: controller,
+      keyboardType: keyboardType,
+      style: TextStyle(
+        fontSize: screenWidth < 600 ? 14 : 16,
+      ),
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(
+          icon,
+          size: screenWidth < 600 ? 20 : 24,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey[300]!),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey[300]!),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFF3B82F6), width: 2),
+        ),
+        filled: true,
+        fillColor: Colors.grey[50],
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: screenWidth < 600 ? 12 : 16,
+          vertical: screenWidth < 600 ? 12 : 16,
         ),
       ),
     );
   }
 
+  Widget _buildSwitchTile(
+      String title,
+      String subtitle,
+      bool value,
+      ValueChanged<bool>? onChanged,
+      double screenWidth,
+      ) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: screenWidth < 600 ? 14 : 16,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: screenWidth < 600 ? 12 : 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: value,
+            onChanged: onChanged,
+            activeColor: const Color(0xFF3B82F6),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionTile(
+      String title,
+      String subtitle,
+      IconData icon,
+      VoidCallback onTap,
+      double screenWidth,
+      ) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.grey[50],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey[200]!),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: screenWidth < 600 ? 14 : 16,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: screenWidth < 600 ? 12 : 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              icon,
+              size: screenWidth < 600 ? 16 : 18,
+              color: Colors.grey[600],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoTile(String title, String value, double screenWidth) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: screenWidth < 600 ? 14 : 16,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: screenWidth < 600 ? 12 : 14,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSyncFrequencySelector(double screenWidth) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.sync,
+            color: _autoSync && !_offlineMode ? const Color(0xFF8B5CF6) : Colors.grey,
+            size: screenWidth < 600 ? 20 : 24,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Sync Frequency',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: screenWidth < 600 ? 14 : 16,
+                  ),
+                ),
+                Text(
+                  _getSyncFrequencyText(_syncFrequency),
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: screenWidth < 600 ? 12 : 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF8B5CF6).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: DropdownButton<String>(
+              value: _syncFrequency,
+              underline: const SizedBox(),
+              style: TextStyle(
+                color: const Color(0xFF8B5CF6),
+                fontSize: screenWidth < 600 ? 12 : 14,
+              ),
+              items: const [
+                DropdownMenuItem(value: 'realtime', child: Text('Real-time')),
+                DropdownMenuItem(value: 'hourly', child: Text('Hourly')),
+                DropdownMenuItem(value: 'daily', child: Text('Daily')),
+                DropdownMenuItem(value: 'weekly', child: Text('Weekly')),
+              ],
+              onChanged: _autoSync && !_offlineMode ? (value) {
+                setState(() {
+                  _syncFrequency = value!;
+                });
+                _saveSetting('sync_frequency', value!);
+              } : null,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDataLimitSlider(double screenWidth) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.storage,
+                color: const Color(0xFF8B5CF6),
+                size: screenWidth < 600 ? 20 : 24,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Offline Data Limit',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: screenWidth < 600 ? 14 : 16,
+                      ),
+                    ),
+                    Text(
+                      '$_offlineDataLimit MB',
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: screenWidth < 600 ? 12 : 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              activeTrackColor: const Color(0xFF8B5CF6),
+              thumbColor: const Color(0xFF8B5CF6),
+              overlayColor: const Color(0xFF8B5CF6).withOpacity(0.2),
+            ),
+            child: Slider(
+              value: _offlineDataLimit.toDouble(),
+              min: 50,
+              max: 500,
+              divisions: 9,
+              label: '$_offlineDataLimit MB',
+              onChanged: (value) {
+                setState(() {
+                  _offlineDataLimit = value.round();
+                });
+              },
+              onChangeEnd: (value) {
+                _saveSetting('offline_data_limit', value.round());
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGradientButton(
+      String text,
+      IconData icon,
+      LinearGradient gradient,
+      VoidCallback onPressed,
+      double screenWidth,
+      ) {
+    return Container(
+      width: double.infinity,
+      height: screenWidth < 600 ? 48 : 52,
+      decoration: BoxDecoration(
+        gradient: gradient,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: gradient.colors.first.withOpacity(0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ElevatedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(
+          icon,
+          size: screenWidth < 600 ? 18 : 20,
+          color: Colors.white,
+        ),
+        label: Text(
+          text,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: screenWidth < 600 ? 14 : 16,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOutlinedButton(
+      String text,
+      IconData icon,
+      Color color,
+      VoidCallback onPressed,
+      double screenWidth,
+      ) {
+    return Container(
+      width: double.infinity,
+      height: screenWidth < 600 ? 48 : 52,
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(
+          icon,
+          size: screenWidth < 600 ? 18 : 20,
+          color: color,
+        ),
+        label: Text(
+          text,
+          style: TextStyle(
+            color: color,
+            fontSize: screenWidth < 600 ? 14 : 16,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(color: color, width: 1.5),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLogoutButton(double screenWidth) {
+    return _buildOutlinedButton(
+      'Logout',
+      Icons.logout,
+      Colors.red,
+      _logout,
+      screenWidth,
+    );
+  }
+
   List<String> _getSupportedLanguages() {
-    // Return supported languages, fallback if AppConfig doesn't exist
     try {
       return AppConfig.supportedLanguages;
     } catch (e) {
@@ -546,9 +1171,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Profile saved successfully!'),
+          SnackBar(
+            content: const Text('Profile saved successfully!'),
             backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         );
       }
@@ -558,6 +1187,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           SnackBar(
             content: Text('Failed to save profile: ${e.toString()}'),
             backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         );
       }
@@ -571,10 +1204,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       if (success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Account linked successfully! Your data is now secure.'),
+          SnackBar(
+            content: const Text('Account linked successfully! Your data is now secure.'),
             backgroundColor: Colors.green,
-            duration: Duration(seconds: 4),
+            duration: const Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         );
       }
@@ -584,6 +1221,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           SnackBar(
             content: Text('Failed to link account: ${e.toString()}'),
             backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         );
       }
@@ -594,7 +1235,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Account'),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: const Text(
+          'Delete Account',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         content: const Text(
           'Are you sure you want to delete your account? '
               'This action cannot be undone and all your data will be lost permanently.',
@@ -608,35 +1255,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onPressed: () async {
               try {
                 final auth = Provider.of<AuthService>(context, listen: false);
-                Navigator.pop(context); // Close dialog first
+                Navigator.pop(context);
 
-                // Show loading
                 showDialog(
                   context: context,
                   barrierDismissible: false,
                   builder: (context) => const Center(
-                    child: CircularProgressIndicator(),
+                    child: CircularProgressIndicator(
+                      color: Color(0xFF3B82F6),
+                    ),
                   ),
                 );
 
                 await auth.deleteAccount();
 
                 if (mounted) {
-                  Navigator.pop(context); // Close loading
+                  Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Account deleted successfully'),
+                    SnackBar(
+                      content: const Text('Account deleted successfully'),
                       backgroundColor: Colors.green,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                   );
                 }
               } catch (e) {
                 if (mounted) {
-                  Navigator.pop(context); // Close loading
+                  Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text('Failed to delete account: ${e.toString()}'),
                       backgroundColor: Colors.red,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                   );
                 }
@@ -657,7 +1313,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Download Offline Content'),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: const Text(
+          'Download Offline Content',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         content: const Text(
           'This will download essential resources for offline use. '
               'The download size will be approximately 50-100 MB. '
@@ -672,13 +1334,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onPressed: () {
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Downloading offline content...'),
-                  duration: Duration(seconds: 3),
+                SnackBar(
+                  content: const Text('Downloading offline content...'),
+                  duration: const Duration(seconds: 3),
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               );
-              // Implement actual download logic here
             },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF3B82F6),
+              foregroundColor: Colors.white,
+            ),
             child: const Text('Download'),
           ),
         ],
@@ -690,7 +1359,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Clear Offline Data'),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: const Text(
+          'Clear Offline Data',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         content: const Text(
           'This will delete all downloaded offline content. '
               'You will need to download it again to use offline features. '
@@ -705,15 +1380,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onPressed: () {
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Offline data cleared successfully'),
+                SnackBar(
+                  content: const Text('Offline data cleared successfully'),
                   backgroundColor: Colors.green,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               );
-              // Implement actual clear logic here
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
             ),
             child: const Text('Clear'),
           ),
@@ -726,11 +1405,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const AlertDialog(
-        content: Column(
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        content: const Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(),
+            CircularProgressIndicator(
+              color: Color(0xFF3B82F6),
+            ),
             SizedBox(height: 16),
             Text('Preparing your data for export...'),
           ],
@@ -738,15 +1422,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
 
-    // Simulate data export
     await Future.delayed(const Duration(seconds: 2));
 
     if (mounted) {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Data export completed! Check your downloads folder.'),
+        SnackBar(
+          content: const Text('Data export completed! Check your downloads folder.'),
           backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
       );
     }
@@ -756,7 +1443,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Clear Cache'),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: const Text(
+          'Clear Cache',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         content: const Text(
           'This will clear temporary files and cached data. '
               'Your personal data and settings will not be affected.',
@@ -768,6 +1461,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF3B82F6),
+              foregroundColor: Colors.white,
+            ),
             child: const Text('Clear Cache'),
           ),
         ],
@@ -776,9 +1473,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (confirmed == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Cache cleared successfully'),
+        SnackBar(
+          content: const Text('Cache cleared successfully'),
           backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
       );
     }
@@ -788,13 +1489,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(title),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Text(
+          title,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
         content: SingleChildScrollView(
           child: Text(content),
         ),
         actions: [
-          TextButton(
+          ElevatedButton(
             onPressed: () => Navigator.pop(context),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF3B82F6),
+              foregroundColor: Colors.white,
+            ),
             child: const Text('Close'),
           ),
         ],
@@ -806,7 +1517,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Logout'),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: const Text(
+          'Logout',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         content: const Text(
           'Are you sure you want to logout? '
               'If you have an anonymous account, make sure to link it with Google first to avoid losing your data.',
@@ -820,15 +1537,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onPressed: () async {
               try {
                 final auth = Provider.of<AuthService>(context, listen: false);
-                Navigator.pop(context); // Close dialog first
+                Navigator.pop(context);
 
                 await auth.logout();
 
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Logged out successfully'),
+                    SnackBar(
+                      content: const Text('Logged out successfully'),
                       backgroundColor: Colors.green,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                   );
                 }
@@ -838,6 +1559,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     SnackBar(
                       content: Text('Logout failed: ${e.toString()}'),
                       backgroundColor: Colors.red,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                   );
                 }
@@ -856,6 +1581,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
+    _animationController.dispose();
     _nameController.dispose();
     _schoolController.dispose();
     _phoneController.dispose();
