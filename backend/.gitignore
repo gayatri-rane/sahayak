@@ -12,9 +12,9 @@ env.bak/
 venv.bak/
 
 # Environment variables
-.env
-.env.local
-.env.production
+# .env
+# .env.local
+# .env.production
 
 # IDE
 .vscode/

@@ -4,7 +4,7 @@
 
 ```sahayak-project/
 ├── backend/
-│   ├── app.py
+│   ├── app.py > Main file
 │   ├── requirements.txt
 │   ├── Dockerfile
 │   ├── .dockerignore
@@ -13,7 +13,7 @@
 │   ├── .gitignore
 │   ├── gemini/
 │   │   ├── __init__.py
-│   │   └── sahayak_ai.py
+│   │   └── sahayak_ai.py > helper functions
 │   ├── tests/
 │   │   ├── __init__.py
 │   │   └── test_api.py
