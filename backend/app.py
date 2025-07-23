@@ -868,8 +868,8 @@ def login():
         # Generate token
         token_data = {
             'username': username,
-            'exp': datetime.now(timezone.utc) + timedelta(hours=24),
-            'iat': datetime.now(timezone.utc)
+            'exp': datetime.utcnow() + timedelta(hours=24),
+            'iat': datetime.utcnow()
         }
         token = jwt.encode(token_data, app.config['SECRET_KEY'], algorithm='HS256')
         
